@@ -1,3 +1,6 @@
+git checkout master
+git merge dev
+
 #!/usr/bin/env sh
 set -e
 echo "Enter release version: "
@@ -13,10 +16,15 @@ then
   VERSION=$VERSION npm run dist
 
   # publish theme
-  echo "Releasing theme-default $VERSION ..."
-  cd packages/theme-default
+  echo "Releasing theme-chalk $VERSION ..."
+  cd packages/theme-chalk
   npm version $VERSION --message "[release] $VERSION"
-  npm publish
+  if [[ $VERSION =~ "beta" ]]
+  then
+    npm publish --tag beta
+  else
+    npm publish
+  fi
   cd ../..
 
   # commit
@@ -25,11 +33,16 @@ then
   npm version $VERSION --message "[release] $VERSION"
 
   # publish
-  git push eleme dev
-  git checkout master
-  git merge dev
   git push eleme master
   git push eleme refs/tags/v$VERSION
+  git checkout dev
+  git rebase master
+  git push eleme dev
 
-  npm publish
+  if [[ $VERSION =~ "beta" ]]
+  then
+    npm publish --tag beta
+  else
+    npm publish
+  fi
 fi

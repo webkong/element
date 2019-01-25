@@ -40,6 +40,32 @@ describe('Pagination', () => {
     expect(elm.querySelector('.el-pagination__total')).to.not.exist;
   });
 
+  it('layout: all in right, need clear float', () => {
+    vm = createTest(Pagination, {
+      layout: '->, prev, pager, next',
+      total: 100
+    }, true);
+    const elm = vm.$el;
+    let right_div = elm.querySelector('.el-pagination__rightwrapper');
+    expect(elm.clientHeight > 0 && right_div.clientHeight > 0).to.equal(true);
+    // elm 将来 padding 可能会变化, 所以使用 >= 来判定
+    expect(elm.clientHeight >= right_div.clientHeight).to.equal(true);
+  });
+
+  it('custom slot', () => {
+    vm = createVue({
+      template: `
+        <el-pagination
+          layout="slot, prev, pager, next"
+          :page-size="25"
+          :total="100">
+          <span class="slot-test">slot test</span>
+        </el-pagination>
+      `
+    });
+    expect(vm.$el.querySelector('.slot-test')).to.exist;
+  });
+
   it('small', () => {
     vm = createTest(Pagination, {
       small: true
@@ -56,6 +82,16 @@ describe('Pagination', () => {
     expect(vm.$el.querySelectorAll('li.number')).to.length(4);
   });
 
+  it('pageSize: NaN', () => {
+    vm = createTest(Pagination, {
+      pageSize: NaN,
+      total: 100
+    });
+
+    const pagers = vm.$el.querySelectorAll('li.number');
+    expect(pagers).to.length(7);
+  });
+
   it('pageCount', () => {
     const vm = createTest(Pagination, {
       pageSize: 25,
@@ -63,6 +99,16 @@ describe('Pagination', () => {
     });
 
     expect(vm.$el.querySelectorAll('li.number')).to.length(4);
+  });
+
+  it('pagerCount', () => {
+    const vm = createTest(Pagination, {
+      pageSize: 25,
+      total: 1000,
+      pagerCount: 21
+    });
+
+    expect(vm.$el.querySelectorAll('li.number')).to.length(21);
   });
 
   it('will work without total & page-count', (done) => {
@@ -91,6 +137,53 @@ describe('Pagination', () => {
     });
 
     expect(vm.$el.querySelector('li.number.active')).to.have.property('textContent').to.equal('3');
+  });
+
+  it('currentPage: NaN', () => {
+    vm = createTest(Pagination, {
+      pageSize: 20,
+      total: 200,
+      currentPage: NaN
+    });
+
+    expect(vm.$el.querySelector('li.number.active')).to.have.property('textContent').to.equal('1');
+    expect(vm.$el.querySelectorAll('li.number')).to.length(7);
+  });
+
+  it('set currentPage & total', (done) => {
+    vm = createVue({
+      template: `
+        <el-pagination
+          @current-change="handleChange"
+          :current-page="currentPage"
+          :page-size="10"
+          :total="100" />
+      `,
+
+      methods: {
+        handleChange(val) {
+          this.currentPage = val;
+          this.page = val;
+        },
+        resetTotal() {
+          this.total = 30;
+          this.currentPage = 1;
+        }
+      },
+
+      data() {
+        return {
+          currentPage: 10
+        };
+      }
+    }, true);
+
+    expect(vm.$el.querySelector('li.number.active')).to.have.property('textContent').to.equal('10');
+    vm.resetTotal();
+    setTimeout(() => {
+      expect(vm.$el.querySelector('li.number.active')).to.have.property('textContent').to.equal('1');
+      done();
+    }, 50);
   });
 
   it('pageSizes', () => {
@@ -126,12 +219,13 @@ describe('Pagination', () => {
     expect(vm.$el.textContent).to.empty;
   });
 
-  it('jumper: change value', () => {
+  it('jumper: change value', (done) => {
     vm = createVue({
       template: `
         <el-pagination
           @current-change="handleChange"
           :page-size="10"
+          layout="pager, jumper"
           :total="100" />
       `,
 
@@ -142,26 +236,47 @@ describe('Pagination', () => {
       },
 
       data() {
-        return { page: 1 };
+        return {
+          page: 1,
+          inputer: null
+        };
+      },
+
+      mounted() {
+        this.inputer = this.$children[0].$children[1].$children[0];
       }
     }, true);
-    const input = vm.$el.querySelector('.el-pagination__jump input');
+    const input = vm.inputer;
+    const changeValue = (value) => {
+      input.$emit('input', value);
+      input.$emit('change', value);
+    };
 
-    input.focus();
-    input.value = -1;
-    triggerEvent(input, 'change');
-    expect(vm.page).to.equal(1);
-
-    input.value = 10000;
-    triggerEvent(input, 'change');
-    expect(vm.page).to.equal(10);
-
-    input.value = '我好帅';
-    triggerEvent(input, 'change');
-    expect(vm.page).to.equal(1);
+    changeValue(1);
+    setTimeout(() => {
+      expect(input.value).to.equal(1);
+      // 多次输入不在min-max区间内的数字
+      changeValue(0);
+      setTimeout(() => {
+        expect(input.value).to.equal(1);
+        changeValue(0);
+        setTimeout(() => {
+          expect(input.value).to.equal(1);
+          changeValue(1000);
+          setTimeout(() => {
+            expect(input.value).to.equal(10);
+            changeValue(1000);
+            setTimeout(() => {
+              expect(input.value).to.equal(10);
+              done();
+            }, 50);
+          }, 50);
+        }, 50);
+      }, 50);
+    }, 50);
   });
 
-  it('event:current-change', () => {
+  it('event:current-change', (done) => {
     vm = createVue({
       template: `
         <el-pagination
@@ -184,7 +299,42 @@ describe('Pagination', () => {
     }
 
     prev.click();
-    expect(vm.change).to.true;
+    setTimeout(() => {
+      expect(vm.change).to.true;
+      done();
+    }, 50);
+  });
+
+  it('event:current-change after current page is manually updated', (done) => {
+    vm = createVue({
+      template: `
+        <el-pagination
+          :total="15"
+          :current-page.sync="currentPage"
+          @current-change="emitCount++" />
+      `,
+
+      data() {
+        return {
+          emitCount: 0,
+          currentPage: 1
+        };
+      }
+    });
+    const next = vm.$el.querySelector('button.btn-next');
+    next.click();
+    setTimeout(() => {
+      expect(vm.emitCount).to.equal(1);
+      vm.currentPage = 1;
+      setTimeout(() => {
+        expect(vm.emitCount).to.equal(1);
+        next.click();
+        setTimeout(() => {
+          expect(vm.emitCount).to.equal(2);
+          done();
+        }, 50);
+      }, 50);
+    }, 50);
   });
 
   it('event:size-change', done => {
@@ -200,11 +350,40 @@ describe('Pagination', () => {
       data() {
         return { trigger: false };
       }
-    });
+    }, true);
 
     expect(vm.trigger).to.false;
+
     setTimeout(_ => {
       vm.$el.querySelectorAll('li.el-select-dropdown__item')[1].click();
+      setTimeout(_ => {
+        expect(vm.trigger).to.true;
+        done();
+      }, 50);
+    }, 50);
+  });
+
+  it('event: prev and next click', done => {
+    vm = createVue({
+      template: `
+        <el-pagination
+          :total="100"
+          layout="sizes, prev, pager, next"
+          @prev-click="trigger = true"
+          @next-click="trigger = true"
+          :pageSize="10" />
+      `,
+
+      data() {
+        return { trigger: false };
+      }
+    }, true);
+    const prev = vm.$el.querySelector('.btn-prev');
+    const next = vm.$el.querySelector('.btn-next');
+    prev.click();
+    setTimeout(_ => {
+      expect(vm.trigger).to.false;
+      next.click();
       setTimeout(_ => {
         expect(vm.trigger).to.true;
         done();

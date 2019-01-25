@@ -1,46 +1,72 @@
 <template>
-  <div class="el-input-number"
+  <div
+    @dragstart.prevent
     :class="[
-      size ? 'el-input-number--' + size : '',
-      { 'is-disabled': disabled }
-    ]"
-  >
-    <el-input
-      :value="currentValue"
-      @keydown.up.native="increase"
-      @keydown.down.native="decrease"
-      @blur="handleBlur"
-      @input="handleInput"
-      :disabled="disabled"
-      :size="size"
-      :class="{
-        'is-active': inputActive
-      }">
-    </el-input>
+      'el-input-number',
+      inputNumberSize ? 'el-input-number--' + inputNumberSize : '',
+      { 'is-disabled': inputNumberDisabled },
+      { 'is-without-controls': !controls },
+      { 'is-controls-right': controlsAtRight }
+    ]">
     <span
-      class="el-input-number__decrease el-icon-minus"
-      :class="{'is-disabled': minDisabled}"
+      class="el-input-number__decrease"
+      role="button"
+      v-if="controls"
       v-repeat-click="decrease"
-      @mouseenter="activeInput(minDisabled)"
-      @mouseleave="inactiveInput(minDisabled)"
-    >
+      :class="{'is-disabled': minDisabled}"
+      @keydown.enter="decrease">
+      <i :class="`el-icon-${controlsAtRight ? 'arrow-down' : 'minus'}`"></i>
     </span>
     <span
-      class="el-input-number__increase el-icon-plus"
-      :class="{'is-disabled': maxDisabled}"
+      class="el-input-number__increase"
+      role="button"
+      v-if="controls"
       v-repeat-click="increase"
-      @mouseenter="activeInput(maxDisabled)"
-      @mouseleave="inactiveInput(maxDisabled)"
-    >
+      :class="{'is-disabled': maxDisabled}"
+      @keydown.enter="increase">
+      <i :class="`el-icon-${controlsAtRight ? 'arrow-up' : 'plus'}`"></i>
     </span>
+    <el-input
+      ref="input"
+      :value="displayValue"
+      :placeholder="placeholder"
+      :disabled="inputNumberDisabled"
+      :size="inputNumberSize"
+      :max="max"
+      :min="min"
+      :name="name"
+      :label="label"
+      @keydown.up.native.prevent="increase"
+      @keydown.down.native.prevent="decrease"
+      @blur="handleBlur"
+      @focus="handleFocus"
+      @input="handleInput"
+      @change="handleInputChange">
+    </el-input>
   </div>
 </template>
 <script>
   import ElInput from 'element-ui/packages/input';
-  import { once, on } from 'wind-dom/src/event';
+  import Focus from 'element-ui/src/mixins/focus';
+  import RepeatClick from 'element-ui/src/directives/repeat-click';
 
   export default {
     name: 'ElInputNumber',
+    mixins: [Focus('input')],
+    inject: {
+      elForm: {
+        default: ''
+      },
+      elFormItem: {
+        default: ''
+      }
+    },
+    directives: {
+      repeatClick: RepeatClick
+    },
+    components: {
+      ElInput
+    },
     props: {
       step: {
         type: Number,
@@ -52,163 +78,185 @@
       },
       min: {
         type: Number,
-        default: 0
+        default: -Infinity
       },
-      value: {
-        default: 0
-      },
+      value: {},
       disabled: Boolean,
-      size: String
-    },
-    directives: {
-      repeatClick: {
-        bind(el, binding, vnode) {
-          let interval = null;
-          let startTime;
-
-          const handler = () => {
-            vnode.context[binding.expression]();
-          };
-
-          const clear = function() {
-            if (new Date() - startTime < 100) {
-              handler();
-            }
-            clearInterval(interval);
-            interval = null;
-          };
-
-          on(el, 'mousedown', function() {
-            startTime = new Date();
-            once(document, 'mouseup', clear);
-            interval = setInterval(function() {
-              handler();
-            }, 100);
-          });
+      size: String,
+      controls: {
+        type: Boolean,
+        default: true
+      },
+      controlsPosition: {
+        type: String,
+        default: ''
+      },
+      name: String,
+      label: String,
+      placeholder: String,
+      precision: {
+        type: Number,
+        validator(val) {
+          return val >= 0 && val === parseInt(val, 10);
         }
       }
     },
-    components: {
-      ElInput
-    },
     data() {
-      // correct the init value
-      let value = this.value;
-      if (value < this.min) {
-        this.$emit('input', this.min);
-        value = this.min;
-      }
-      if (value > this.max) {
-        this.$emit('input', this.max);
-        value = this.max;
-      }
       return {
-        currentValue: value,
-        inputActive: false
+        currentValue: 0,
+        userInput: null
       };
     },
     watch: {
-      value(val) {
-        this.currentValue = val;
-      },
-
-      currentValue(newVal, oldVal) {
-        let value = Number(newVal);
-        if (value <= this.max && value >= this.min) {
-          this.$emit('change', value);
-          this.$emit('input', value);
+      value: {
+        immediate: true,
+        handler(value) {
+          let newVal = value === undefined ? value : Number(value);
+          if (newVal !== undefined) {
+            if (isNaN(newVal)) {
+              return;
+            }
+            if (this.precision !== undefined) {
+              newVal = this.toPrecision(newVal, this.precision);
+            }
+          }
+          if (newVal >= this.max) newVal = this.max;
+          if (newVal <= this.min) newVal = this.min;
+          this.currentValue = newVal;
+          this.userInput = null;
+          this.$emit('input', newVal);
         }
       }
     },
     computed: {
       minDisabled() {
-        return this.value - this.step < this.min;
+        return this._decrease(this.value, this.step) < this.min;
       },
       maxDisabled() {
-        return this.value + this.step > this.max;
+        return this._increase(this.value, this.step) > this.max;
+      },
+      numPrecision() {
+        const { value, step, getPrecision, precision } = this;
+        const stepPrecision = getPrecision(step);
+        if (precision !== undefined) {
+          if (stepPrecision > precision) {
+            console.warn('[Element Warn][InputNumber]precision should not be less than the decimal places of step');
+          }
+          return precision;
+        } else {
+          return Math.max(getPrecision(value), stepPrecision);
+        }
+      },
+      controlsAtRight() {
+        return this.controls && this.controlsPosition === 'right';
+      },
+      _elFormItemSize() {
+        return (this.elFormItem || {}).elFormItemSize;
+      },
+      inputNumberSize() {
+        return this.size || this._elFormItemSize || (this.$ELEMENT || {}).size;
+      },
+      inputNumberDisabled() {
+        return this.disabled || (this.elForm || {}).disabled;
+      },
+      displayValue() {
+        if (this.userInput !== null) {
+          return this.userInput;
+        }
+        const currentValue = this.currentValue;
+        if (typeof currentValue === 'number' && this.precision !== undefined) {
+          return currentValue.toFixed(this.precision);
+        } else {
+          return currentValue;
+        }
       }
     },
     methods: {
-      accSub(arg1, arg2) {
-        var r1, r2, m, n;
-        try {
-          r1 = arg1.toString().split('.')[1].length;
-        } catch (e) {
-          r1 = 0;
-        }
-        try {
-          r2 = arg2.toString().split('.')[1].length;
-        } catch (e) {
-          r2 = 0;
-        }
-        m = Math.pow(10, Math.max(r1, r2));
-        n = (r1 >= r2) ? r1 : r2;
-        return parseFloat(((arg1 * m - arg2 * m) / m).toFixed(n));
+      toPrecision(num, precision) {
+        if (precision === undefined) precision = this.numPrecision;
+        return parseFloat(parseFloat(Number(num).toFixed(precision)));
       },
-      accAdd(arg1, arg2) {
-        var r1, r2, m, c;
-        try {
-          r1 = arg1.toString().split('.')[1].length;
-        } catch (e) {
-          r1 = 0;
+      getPrecision(value) {
+        if (value === undefined) return 0;
+        const valueString = value.toString();
+        const dotPosition = valueString.indexOf('.');
+        let precision = 0;
+        if (dotPosition !== -1) {
+          precision = valueString.length - dotPosition - 1;
         }
-        try {
-          r2 = arg2.toString().split('.')[1].length;
-        } catch (e) {
-          r2 = 0;
-        }
-        c = Math.abs(r1 - r2);
-        m = Math.pow(10, Math.max(r1, r2));
-        if (c > 0) {
-          var cm = Math.pow(10, c);
-          if (r1 > r2) {
-            arg1 = Number(arg1.toString().replace('.', ''));
-            arg2 = Number(arg2.toString().replace('.', '')) * cm;
-          } else {
-            arg1 = Number(arg1.toString().replace('.', '')) * cm;
-            arg2 = Number(arg2.toString().replace('.', ''));
-          }
-        } else {
-          arg1 = Number(arg1.toString().replace('.', ''));
-          arg2 = Number(arg2.toString().replace('.', ''));
-        }
-        return (arg1 + arg2) / m;
+        return precision;
+      },
+      _increase(val, step) {
+        if (typeof val !== 'number' && val !== undefined) return this.currentValue;
+
+        const precisionFactor = Math.pow(10, this.numPrecision);
+        // Solve the accuracy problem of JS decimal calculation by converting the value to integer.
+        return this.toPrecision((precisionFactor * val + precisionFactor * step) / precisionFactor);
+      },
+      _decrease(val, step) {
+        if (typeof val !== 'number' && val !== undefined) return this.currentValue;
+
+        const precisionFactor = Math.pow(10, this.numPrecision);
+
+        return this.toPrecision((precisionFactor * val - precisionFactor * step) / precisionFactor);
       },
       increase() {
-        if (this.value + this.step > this.max || this.disabled) return;
-        this.currentValue = this.accAdd(this.step, this.value);
-        if (this.maxDisabled) {
-          this.inputActive = false;
-        }
+        if (this.inputNumberDisabled || this.maxDisabled) return;
+        const value = this.value || 0;
+        const newVal = this._increase(value, this.step);
+        this.setCurrentValue(newVal);
       },
       decrease() {
-        if (this.value - this.step < this.min || this.disabled) return;
-        this.currentValue = this.accSub(this.value, this.step);
-        if (this.minDisabled) {
-          this.inputActive = false;
-        }
-      },
-      activeInput(disabled) {
-        if (!this.disabled && !disabled) {
-          this.inputActive = true;
-        }
-      },
-      inactiveInput(disabled) {
-        if (!this.disabled && !disabled) {
-          this.inputActive = false;
-        }
+        if (this.inputNumberDisabled || this.minDisabled) return;
+        const value = this.value || 0;
+        const newVal = this._decrease(value, this.step);
+        this.setCurrentValue(newVal);
       },
       handleBlur(event) {
-        let value = Number(this.currentValue);
-        if (isNaN(value) || value > this.max || value < this.min) {
-          this.currentValue = this.value;
-        } else {
-          this.currentValue = value;
+        this.$emit('blur', event);
+      },
+      handleFocus(event) {
+        this.$emit('focus', event);
+      },
+      setCurrentValue(newVal) {
+        const oldVal = this.currentValue;
+        if (typeof newVal === 'number' && this.precision !== undefined) {
+          newVal = this.toPrecision(newVal, this.precision);
         }
+        if (newVal >= this.max) newVal = this.max;
+        if (newVal <= this.min) newVal = this.min;
+        if (oldVal === newVal) return;
+        this.userInput = null;
+        this.$emit('input', newVal);
+        this.$emit('change', newVal, oldVal);
+        this.currentValue = newVal;
       },
       handleInput(value) {
-        this.currentValue = value;
+        this.userInput = value;
+      },
+      handleInputChange(value) {
+        const newVal = value === '' ? undefined : Number(value);
+        if (!isNaN(newVal) || value === '') {
+          this.setCurrentValue(newVal);
+        }
+        this.userInput = null;
+      },
+      select() {
+        this.$refs.input.select();
       }
+    },
+    mounted() {
+      let innerInput = this.$refs.input.$refs.input;
+      innerInput.setAttribute('role', 'spinbutton');
+      innerInput.setAttribute('aria-valuemax', this.max);
+      innerInput.setAttribute('aria-valuemin', this.min);
+      innerInput.setAttribute('aria-valuenow', this.currentValue);
+      innerInput.setAttribute('aria-disabled', this.inputNumberDisabled);
+    },
+    updated() {
+      if (!this.$refs || !this.$refs.input) return;
+      const innerInput = this.$refs.input.$refs.input;
+      innerInput.setAttribute('aria-valuenow', this.currentValue);
     }
   };
 </script>

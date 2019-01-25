@@ -1,5 +1,9 @@
 export default {
   el: {
+    colorpicker: {
+      confirm: 'OK',
+      clear: 'Pulisci'
+    },
     datepicker: {
       now: 'Ora',
       today: 'Oggi',
@@ -12,7 +16,11 @@ export default {
       startTime: 'Ora inizio',
       endDate: 'Data fine',
       endTime: 'Ora fine',
-      year: 'Anno',
+      prevYear: 'Anno precedente',
+      nextYear: 'Anno successivo',
+      prevMonth: 'Mese precedente',
+      nextMonth: 'Mese successivo',
+      year: '',
       month1: 'Gennaio',
       month2: 'Febbraio',
       month3: 'Marzo',
@@ -53,7 +61,12 @@ export default {
     select: {
       loading: 'Caricamento',
       noMatch: 'Nessuna corrispondenza',
-      noData: 'Nessun risultato',
+      noData: 'Nessun dato',
+      placeholder: 'Seleziona'
+    },
+    cascader: {
+      noMatch: 'Nessuna corrispondenza',
+      loading: 'Caricamento',
       placeholder: 'Seleziona'
     },
     pagination: {
@@ -68,6 +81,7 @@ export default {
       error: 'Input non valido'
     },
     upload: {
+      deleteTip: 'Premi cancella per rimuovere',
       delete: 'Cancella',
       preview: 'Anteprima',
       continue: 'Continua'
@@ -76,10 +90,19 @@ export default {
       emptyText: 'Nessun dato',
       confirmFilter: 'Conferma',
       resetFilter: 'Reset',
-      clearFilter: 'Tutti'
+      clearFilter: 'Tutti',
+      sumText: 'Somma'
     },
     tree: {
       emptyText: 'Nessun dato'
+    },
+    transfer: {
+      noMatch: 'Nessuna corrispondenza',
+      noData: 'Nessun dato',
+      titles: ['Lista 1', 'Lista 2'],
+      filterPlaceholder: 'Inserisci filtro',
+      noCheckedFormat: '{total} elementi',
+      hasCheckedFormat: '{checked}/{total} selezionati'
     }
   }
 };

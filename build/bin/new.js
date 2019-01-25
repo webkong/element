@@ -6,7 +6,7 @@ process.on('exit', () => {
 });
 
 if (!process.argv[2]) {
-  console.error('[组件名]必填.');
+  console.error('[组件名]必填 - Please enter new component name');
   process.exit(1);
 }
 
@@ -30,44 +30,6 @@ ${ComponentName}.install = function(Vue) {
 export default ${ComponentName};`
   },
   {
-    filename: 'cooking.conf.js',
-    content: `var cooking = require('cooking');
-var path = require('path');
-
-cooking.set({
-  entry: {
-    index: path.join(__dirname, 'index.js')
-  },
-  dist: path.join(__dirname, 'lib'),
-  template: false,
-  format: 'umd',
-  moduleName: 'El${ComponentName}',
-  extends: ['vue2'],
-  alias: config.alias,
-  externals: { vue: config.vue }
-});
-
-module.exports = cooking.resolve();`
-  },
-  {
-    filename: 'package.json',
-    content: `{
-  "name": "el-${componentname}",
-  "version": "0.0.0",
-  "description": "A ${componentname} component for Vue.js.",
-  "keywords": [
-    "element",
-    "vue",
-    "component"
-  ],
-  "main": "./lib/index.js",
-  "repository": "https://github.com/ElemeFE/element/tree/master/packages/${componentname}",
-  "author": "elemefe",
-  "license": "MIT",
-  "dependencies": {}
-}`
-  },
-  {
     filename: 'src/main.vue',
     content: `<template>
   <div class="el-${componentname}"></div>
@@ -75,35 +37,55 @@ module.exports = cooking.resolve();`
 
 <script>
 export default {
-  name: 'el-${componentname}'
+  name: 'El${ComponentName}'
 };
 </script>`
   },
   {
     filename: path.join('../../examples/docs/zh-CN', `${componentname}.md`),
-    content: `## ${chineseName}`
+    content: `## ${ComponentName} ${chineseName}`
   },
   {
-    filename: path.join('../../examples/docs/en-us', `${componentname}.md`),
-    content: `## ${componentname}`
+    filename: path.join('../../examples/docs/en-US', `${componentname}.md`),
+    content: `## ${ComponentName}`
+  },
+  {
+    filename: path.join('../../examples/docs/es', `${componentname}.md`),
+    content: `## ${ComponentName}`
   },
   {
     filename: path.join('../../test/unit/specs', `${componentname}.spec.js`),
     content: `import { createTest, destroyVM } from '../util';
-import Alert from 'packages/{{componentname}}';
+import ${ComponentName} from 'packages/${componentname}';
 
-describe('{{ComponentName}}', () => {
+describe('${ComponentName}', () => {
   let vm;
   afterEach(() => {
     destroyVM(vm);
   });
 
   it('create', () => {
-    vm = createTest({{ComponentName}}, true);
+    vm = createTest(${ComponentName}, true);
     expect(vm.$el).to.exist;
   });
 });
 `
+  },
+  {
+    filename: path.join('../../packages/theme-chalk/src', `${componentname}.scss`),
+    content: `@import "mixins/mixins";
+@import "common/var";
+
+@include b(${componentname}) {
+}`
+  },
+  {
+    filename: path.join('../../types', `${componentname}.d.ts`),
+    content: `import { ElementUIComponent } from './component'
+
+/** ${ComponentName} Component */
+export declare class El${ComponentName} extends ElementUIComponent {
+}`
   }
 ];
 
@@ -121,20 +103,20 @@ fileSave(path.join(__dirname, '../../components.json'))
 // 创建 package
 Files.forEach(file => {
   fileSave(path.join(PackagePath, file.filename))
-  .write(file.content, 'utf8')
-  .end('\n');
+    .write(file.content, 'utf8')
+    .end('\n');
 });
 
 // 添加到 nav.config.json
 const navConfigFile = require('../../examples/nav.config.json');
 
 Object.keys(navConfigFile).forEach(lang => {
-  let groups = navConfigFile[lang][2].groups;
+  let groups = navConfigFile[lang][4].groups;
   groups[groups.length - 1].list.push({
     path: `/${componentname}`,
     title: lang === 'zh-CN' && componentname !== chineseName
-        ? `${ComponentName} ${chineseName}`
-        : ComponentName
+      ? `${ComponentName} ${chineseName}`
+      : ComponentName
   });
 });
 
