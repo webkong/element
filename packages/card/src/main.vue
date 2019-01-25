@@ -1,5 +1,5 @@
 <template>
-  <div class="el-card">
+  <div class="el-card" :class="shadow ? 'is-' + shadow + '-shadow' : 'is-always-shadow'">
     <div class="el-card__header" v-if="$slots.header || header">
       <slot name="header">{{ header }}</slot>
     </div>
@@ -11,8 +11,13 @@
 
 <script>
   export default {
-    name: 'el-card',
-
-    props: ['header', 'bodyStyle']
+    name: 'ElCard',
+    props: {
+      header: {},
+      bodyStyle: {},
+      shadow: {
+        type: String
+      }
+    }
   };
 </script>

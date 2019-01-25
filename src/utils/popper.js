@@ -71,6 +71,8 @@
 
         arrowElement: '[x-arrow]',
 
+        arrowOffset: 0,
+
         // list of functions used to modify the offsets before they are applied to the popper
         modifiers: [ 'shift', 'offset', 'preventOverflow', 'keepTogether', 'arrow', 'flip', 'applyStyle'],
 
@@ -180,7 +182,7 @@
 
         // make sure to apply the popper position before any computation
         this.state.position = this._getPosition(this._popper, this._reference);
-        setStyle(this._popper, { position: this.state.position});
+        setStyle(this._popper, { position: this.state.position, top: 0 });
 
         // fire the first update to position the popper in the right place
         this.update();
@@ -238,7 +240,6 @@
         if (typeof this.state.updateCallback === 'function') {
             this.state.updateCallback(data);
         }
-
     };
 
     /**
@@ -369,7 +370,8 @@
      * @method
      * @memberof Popper
      * @param config {HTMLElement} popper element
-     * @returns {HTMLElement} reference element
+     * @param reference {HTMLElement} reference element
+     * @returns {String} position
      */
     Popper.prototype._getPosition = function(popper, reference) {
         var container = getOffsetParent(reference);
@@ -435,7 +437,6 @@
         popperOffsets.width   = popperRect.width;
         popperOffsets.height  = popperRect.height;
 
-
         return {
             popper: popperOffsets,
             reference: referenceOffsets
@@ -461,6 +462,7 @@
                 target = root;
             }
             target.addEventListener('scroll', this.state.updateBound);
+            this.state.scrollTarget = target;
         }
     };
 
@@ -473,13 +475,9 @@
     Popper.prototype._removeEventListeners = function() {
         // NOTE: 1 DOM access here
         root.removeEventListener('resize', this.state.updateBound);
-        if (this._options.boundariesElement !== 'window') {
-            var target = getScrollParent(this._reference);
-            // here it could be both `body` or `documentElement` thanks to Firefox, we then check both
-            if (target === root.document.body || target === root.document.documentElement) {
-                target = root;
-            }
-            target.removeEventListener('scroll', this.state.updateBound);
+        if (this._options.boundariesElement !== 'window' && this.state.scrollTarget) {
+            this.state.scrollTarget.removeEventListener('scroll', this.state.updateBound);
+            this.state.scrollTarget = null;
         }
         this.state.updateBound = null;
     };
@@ -516,9 +514,17 @@
             var scrollParent = getScrollParent(this._popper);
             var offsetParentRect = getOffsetRect(offsetParent);
 
+            // Thanks the fucking native API, `document.body.scrollTop` & `document.documentElement.scrollTop`
+            var getScrollTopValue = function (element) {
+                return element == document.body ? Math.max(document.documentElement.scrollTop, document.body.scrollTop) : element.scrollTop;
+            }
+            var getScrollLeftValue = function (element) {
+                return element == document.body ? Math.max(document.documentElement.scrollLeft, document.body.scrollLeft) : element.scrollLeft;
+            }
+
             // if the popper is fixed we don't have to substract scrolling from the boundaries
-            var scrollTop = data.offsets.popper.position === 'fixed' ? 0 : scrollParent.scrollTop;
-            var scrollLeft = data.offsets.popper.position === 'fixed' ? 0 : scrollParent.scrollLeft;
+            var scrollTop = data.offsets.popper.position === 'fixed' ? 0 : getScrollTopValue(scrollParent);
+            var scrollLeft = data.offsets.popper.position === 'fixed' ? 0 : getScrollLeftValue(scrollParent);
 
             boundaries = {
                 top: 0 - (offsetParentRect.top - scrollTop),
@@ -574,9 +580,10 @@
      * Helper used to know if the given modifier depends from another one.
      * @method
      * @memberof Popper
+     * @param {String} requesting - name of requesting modifier
+     * @param {String} requested - name of requested modifier
      * @returns {Boolean}
      */
-
     Popper.prototype.isModifierRequired = function(requesting, requested) {
         var index = getArrayKeyIndex(this._options.modifiers, requesting);
         return !!this._options.modifiers.slice(0, index).filter(function(modifier) {
@@ -868,6 +875,7 @@
      */
     Popper.prototype.modifiers.arrow = function(data) {
         var arrow  = this._options.arrowElement;
+        var arrowOffset = this._options.arrowOffset;
 
         // if the arrowElement is a string, suppose it's a CSS selector
         if (typeof arrow === 'string') {
@@ -899,6 +907,7 @@
 
         var len         = isVertical ? 'height' : 'width';
         var side        = isVertical ? 'top' : 'left';
+        var translate   = isVertical ? 'translateY' : 'translateX';
         var altSide     = isVertical ? 'left' : 'top';
         var opSide      = isVertical ? 'bottom' : 'right';
         var arrowSize   = getOuterSizes(arrow)[len];
@@ -917,12 +926,12 @@
         }
 
         // compute center of the popper
-        var center = reference[side] + (reference[len] / 2) - (arrowSize / 2);
+        var center = reference[side] + (arrowOffset || (reference[len] / 2) - (arrowSize / 2));
 
         var sideValue = center - popper[side];
 
         // prevent arrow from being placed not contiguously to its popper
-        sideValue = Math.max(Math.min(popper[len] - arrowSize, sideValue), 0);
+        sideValue = Math.max(Math.min(popper[len] - arrowSize - 8, sideValue), 8);
         arrowStyle[side] = sideValue;
         arrowStyle[altSide] = ''; // make sure to remove any old style from the arrow
 
@@ -1042,10 +1051,16 @@
      * @returns {Element} offset parent
      */
     function getScrollParent(element) {
-        if (element === root.document) {
+        var parent = element.parentNode;
+
+        if (!parent) {
+            return element;
+        }
+
+        if (parent === root.document) {
             // Firefox puts the scrollTOp value on `documentElement` instead of `body`, we then check which of them is
             // greater than 0 and return the proper element
-            if (root.document.body.scrollTop) {
+            if (root.document.body.scrollTop || root.document.body.scrollLeft) {
                 return root.document.body;
             } else {
                 return root.document.documentElement;
@@ -1054,16 +1069,16 @@
 
         // Firefox want us to check `-x` and `-y` variations as well
         if (
-            ['scroll', 'auto'].indexOf(getStyleComputedProperty(element, 'overflow')) !== -1 ||
-            ['scroll', 'auto'].indexOf(getStyleComputedProperty(element, 'overflow-x')) !== -1 ||
-            ['scroll', 'auto'].indexOf(getStyleComputedProperty(element, 'overflow-y')) !== -1
+            ['scroll', 'auto'].indexOf(getStyleComputedProperty(parent, 'overflow')) !== -1 ||
+            ['scroll', 'auto'].indexOf(getStyleComputedProperty(parent, 'overflow-x')) !== -1 ||
+            ['scroll', 'auto'].indexOf(getStyleComputedProperty(parent, 'overflow-y')) !== -1
         ) {
             // If the detected scrollParent is body, we perform an additional check on its parentNode
             // in this way we'll get body if the browser is Chrome-ish, or documentElement otherwise
             // fixes issue #65
-            return element === root.document.body ? getScrollParent(element.parentNode) : element;
+            return parent;
         }
-        return element.parentNode ? getScrollParent(element.parentNode) : element;
+        return getScrollParent(element.parentNode);
     }
 
     /**
@@ -1109,7 +1124,7 @@
      * Check if the given variable is a function
      * @function
      * @ignore
-     * @argument {Element} element - Element to check
+     * @argument {*} functionToCheck - variable to check
      * @returns {Boolean} answer to: is a function?
      */
     function isFunction(functionToCheck) {
@@ -1152,7 +1167,7 @@
         // whether the IE version is lower than 11
         var isIE = navigator.userAgent.indexOf("MSIE") != -1;
 
-        // fix ie document bouding top always 0 bug
+        // fix ie document bounding top always 0 bug
         var rectTop = isIE && element.tagName === 'HTML'
             ? -element.scrollTop
             : rect.top;

@@ -1,134 +1,185 @@
 <script>
-  module.exports = {
-    name: 'el-tabs',
+  import TabNav from './tab-nav';
+
+  export default {
+    name: 'ElTabs',
+
+    components: {
+      TabNav
+    },
 
     props: {
       type: String,
-      tabPosition: String,
       activeName: String,
-      closable: false,
-      tabWidth: 0
+      closable: Boolean,
+      addable: Boolean,
+      value: {},
+      editable: Boolean,
+      tabPosition: {
+        type: String,
+        default: 'top'
+      },
+      beforeLeave: Function,
+      stretch: Boolean
+    },
+
+    provide() {
+      return {
+        rootTabs: this
+      };
     },
 
     data() {
       return {
-        children: null,
-        activeTab: null,
-        currentName: 0
+        currentName: this.value || this.activeName,
+        panes: []
       };
     },
 
     watch: {
-      activeName: {
-        handler(val) {
-          this.currentName = val;
+      activeName(value) {
+        this.setCurrentName(value);
+      },
+      value(value) {
+        this.setCurrentName(value);
+      },
+      currentName(value) {
+        if (this.$refs.nav) {
+          this.$nextTick(() => {
+            this.$refs.nav.$nextTick(_ => {
+              this.$refs.nav.scrollToActiveTab();
+            });
+          });
         }
       }
     },
 
     methods: {
-      handleTabRemove(tab, event) {
-        event.stopPropagation();
-        let tabs = this.$children;
-
-        var index = tabs.indexOf(tab);
-        tab.$destroy(true);
-
-        if (tab.index === this.currentName) {
-          let nextChild = tabs[index];
-          let prevChild = tabs[index - 1];
-
-          this.currentName = nextChild ? nextChild.index : prevChild ? prevChild.index : '-1';
+      calcPaneInstances() {
+        if (this.$slots.default) {
+          const paneSlots = this.$slots.default.filter(vnode => vnode.tag &&
+            vnode.componentOptions && vnode.componentOptions.Ctor.options.name === 'ElTabPane');
+          // update indeed
+          const panes = paneSlots.map(({ componentInstance }) => componentInstance);
+          if (!(panes.length === this.panes.length && panes.every((pane, index) => pane === this.panes[index]))) {
+            this.panes = panes;
+          }
+        } else if (this.panes.length !== 0) {
+          this.panes = [];
         }
-        this.$emit('tab-remove', tab);
-        this.$forceUpdate();
       },
-      handleTabClick(tab, event) {
-        this.currentName = tab.index;
+      handleTabClick(tab, tabName, event) {
+        if (tab.disabled) return;
+        this.setCurrentName(tabName);
         this.$emit('tab-click', tab, event);
       },
-      calcBarStyle() {
-        if (this.type || !this.$refs.tabs) return {};
-        var style = {};
-        var offset = 0;
-        var tabWidth = 0;
+      handleTabRemove(pane, ev) {
+        if (pane.disabled) return;
+        ev.stopPropagation();
+        this.$emit('edit', pane.name, 'remove');
+        this.$emit('tab-remove', pane.name);
+      },
+      handleTabAdd() {
+        this.$emit('edit', null, 'add');
+        this.$emit('tab-add');
+      },
+      setCurrentName(value) {
+        const changeCurrentName = () => {
+          this.currentName = value;
+          this.$emit('input', value);
+        };
+        if (this.currentName !== value && this.beforeLeave) {
+          const before = this.beforeLeave(value, this.currentName);
+          if (before && before.then) {
+            before.then(() => {
+              changeCurrentName();
 
-        this.$children.every((panel, index) => {
-          let $el = this.$refs.tabs[index];
-          if (!$el) { return false; }
-          if (panel.index !== this.currentName) {
-            offset += $el.clientWidth;
-            return true;
-          } else {
-            tabWidth = $el.clientWidth;
-            return false;
+              this.$refs.nav && this.$refs.nav.removeFocus();
+            });
+          } else if (before !== false) {
+            changeCurrentName();
           }
-        });
-
-        style.width = tabWidth + 'px';
-        style.transform = `translateX(${offset}px)`;
-
-        return style;
+        } else {
+          changeCurrentName();
+        }
       }
     },
-    mounted() {
-      this.currentName = this.activeName || this.$children[0].index || '1';
-      this.$nextTick(() => {
-        this.$forceUpdate();
-      });
-    },
+
     render(h) {
       let {
         type,
-        closable,
-        handleTabRemove,
         handleTabClick,
-        currentName
+        handleTabRemove,
+        handleTabAdd,
+        currentName,
+        panes,
+        editable,
+        addable,
+        tabPosition,
+        stretch
       } = this;
 
-      const barStyle = this.calcBarStyle();
-      const activeBar = !type
-        ? <div class="el-tabs__active-bar" style={barStyle}></div>
+      const newButton = editable || addable
+        ? (
+          <span
+            class="el-tabs__new-tab"
+            on-click={ handleTabAdd }
+            tabindex="0"
+            on-keydown={ (ev) => { if (ev.keyCode === 13) { handleTabAdd(); }} }
+          >
+            <i class="el-icon-plus"></i>
+          </span>
+        )
         : null;
 
-      const tabs = this.$children.map((tab, index) => {
-        let btnClose = h('span', {
-          class: {
-            'el-icon-close': true
-          },
-          on: { click: (ev) => { handleTabRemove(tab, ev); } }
-        });
-        const _tab = h('div', {
-          class: {
-            'el-tabs__item': true,
-            'is-active': currentName === tab.index,
-            'is-disabled': tab.disabled,
-            'is-closable': closable
-          },
-          ref: 'tabs',
-          refInFor: true,
-          on: { click: (ev) => { handleTabClick(tab, ev); } }
-        }, [
-          tab.label,
-          closable ? btnClose : null,
-          index === 0 ? activeBar : null
-        ]);
-        return _tab;
-      });
+      const navData = {
+        props: {
+          currentName,
+          onTabClick: handleTabClick,
+          onTabRemove: handleTabRemove,
+          editable,
+          type,
+          panes,
+          stretch
+        },
+        ref: 'nav'
+      };
+      const header = (
+        <div class={['el-tabs__header', `is-${tabPosition}`]}>
+          {newButton}
+          <tab-nav { ...navData }></tab-nav>
+        </div>
+      );
+      const panels = (
+        <div class="el-tabs__content">
+          {this.$slots.default}
+        </div>
+      );
+
       return (
         <div class={{
           'el-tabs': true,
           'el-tabs--card': type === 'card',
+          [`el-tabs--${tabPosition}`]: true,
           'el-tabs--border-card': type === 'border-card'
         }}>
-          <div class="el-tabs__header">
-            {tabs}
-          </div>
-          <div class="el-tabs__content">
-            {this.$slots.default}
-          </div>
+          { tabPosition !== 'bottom' ? [header, panels] : [panels, header] }
         </div>
       );
+    },
+  
+    created() {
+      if (!this.currentName) {
+        this.setCurrentName('0');
+      }
+    },
+
+    mounted() {
+      this.calcPaneInstances();
+    },
+
+    updated() {
+      this.calcPaneInstances();
     }
   };
 </script>

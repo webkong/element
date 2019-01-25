@@ -1,5 +1,9 @@
 export default {
   el: {
+    colorpicker: {
+      confirm: 'OK',
+      clear: 'Clear'
+    },
     datepicker: {
       now: 'Now',
       today: 'Today',
@@ -12,6 +16,10 @@ export default {
       startTime: 'Start Time',
       endDate: 'End Date',
       endTime: 'End Time',
+      prevYear: 'Previous Year',
+      nextYear: 'Next Year',
+      prevMonth: 'Previous Month',
+      nextMonth: 'Next Month',
       year: '',
       month1: 'January',
       month2: 'February',
@@ -56,6 +64,11 @@ export default {
       noData: 'No data',
       placeholder: 'Select'
     },
+    cascader: {
+      noMatch: 'No matching data',
+      loading: 'Loading',
+      placeholder: 'Select'
+    },
     pagination: {
       goto: 'Go to',
       pagesize: '/page',
@@ -63,11 +76,13 @@ export default {
       pageClassifier: ''
     },
     messagebox: {
+      title: 'Message',
       confirm: 'OK',
       cancel: 'Cancel',
       error: 'Illegal input'
     },
     upload: {
+      deleteTip: 'press delete to remove',
       delete: 'Delete',
       preview: 'Preview',
       continue: 'Continue'
@@ -76,10 +91,19 @@ export default {
       emptyText: 'No Data',
       confirmFilter: 'Confirm',
       resetFilter: 'Reset',
-      clearFilter: 'All'
+      clearFilter: 'All',
+      sumText: 'Sum'
     },
     tree: {
       emptyText: 'No Data'
+    },
+    transfer: {
+      noMatch: 'No matching data',
+      noData: 'No data',
+      titles: ['List 1', 'List 2'], // to be translated
+      filterPlaceholder: 'Enter keyword', // to be translated
+      noCheckedFormat: '{total} items', // to be translated
+      hasCheckedFormat: '{checked}/{total} checked' // to be translated
     }
   }
 };
